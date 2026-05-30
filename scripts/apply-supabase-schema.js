@@ -1,0 +1,26 @@
+import 'dotenv/config';
+import fs from 'node:fs/promises';
+import {Client} from 'pg';
+
+const databaseUrl = process.env.SUPABASE_DATABASE_URL;
+
+if (!databaseUrl) {
+    throw new Error('Set SUPABASE_DATABASE_URL before running this script.');
+}
+
+const schemaSql = await fs.readFile(new URL('../supabase/schema.sql', import.meta.url), 'utf8');
+const client = new Client({
+    connectionString: databaseUrl,
+    ssl: {
+        rejectUnauthorized: false,
+    },
+});
+
+await client.connect();
+
+try {
+    await client.query(schemaSql);
+    console.log('Supabase schema is ready.');
+} finally {
+    await client.end();
+}

@@ -121,7 +121,10 @@ async function uploadPhoto(row) {
         return row.photo_url;
     }
 
-    const localPath = path.join(projectRoot, row.photo_url.replace(/^\/+/, ''));
+    const normalizedPhotoPath = row.photo_url.startsWith('/uploads/')
+        ? path.join('public', row.photo_url)
+        : row.photo_url;
+    const localPath = path.join(projectRoot, normalizedPhotoPath.replace(/^\/+/, ''));
 
     try {
         const bytes = await fs.readFile(localPath);

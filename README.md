@@ -32,6 +32,9 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=...
 Для переносу поточних локальних даних у Supabase потрібен service role key:
 
 ```bash
+SUPABASE_DATABASE_URL=...
+npm run supabase:migrate
+
 SUPABASE_SERVICE_ROLE_KEY=...
 npm run supabase:seed
 ```
