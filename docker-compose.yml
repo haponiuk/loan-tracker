@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: loan-tracker-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: loan_tracker
+      POSTGRES_USER: loan_tracker
+      POSTGRES_PASSWORD: loan_tracker
+    ports:
+      - "54329:5432"
+    volumes:
+      - loan_tracker_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U loan_tracker -d loan_tracker"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  loan_tracker_postgres:

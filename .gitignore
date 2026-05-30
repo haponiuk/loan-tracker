@@ -1,0 +1,11 @@
+/node_modules
+/.block
+/.cursor
+/.windsurf
+/.airtableblocksrc.json
+/block.json
+/build
+/dist
+.env
+/public/uploads/*
+!/public/uploads/.gitkeep
