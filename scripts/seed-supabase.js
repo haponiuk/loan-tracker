@@ -24,17 +24,17 @@ const supabase = createClient(supabaseUrl, serviceRoleKey, {
 
 const [debtorsResult, loansResult, repaymentsResult] = await Promise.all([
     query(`
-        SELECT id, full_name, first_name, last_name, borrowed, repaid, remaining, photo_url, source
+        SELECT id, full_name, first_name, last_name, borrowed, repaid, remaining, photo_url
         FROM debtors
         ORDER BY full_name ASC
     `),
     query(`
-        SELECT id, debtor_id, amount, loan_date, due_date, notes, source
+        SELECT id, debtor_id, amount, loan_date, due_date, notes
         FROM loans
         ORDER BY loan_date ASC NULLS LAST, id ASC
     `),
     query(`
-        SELECT id, debtor_id, amount, repayment_date, source
+        SELECT id, debtor_id, amount, repayment_date
         FROM repayments
         ORDER BY repayment_date ASC NULLS LAST, id ASC
     `),
@@ -45,7 +45,7 @@ await ensurePhotoBucket();
 const debtors = [];
 for (const row of debtorsResult.rows) {
     debtors.push({
-        id: row.id,
+        legacyId: row.id,
         full_name: row.full_name,
         first_name: row.first_name,
         last_name: row.last_name,
@@ -53,45 +53,74 @@ for (const row of debtorsResult.rows) {
         repaid: toNumber(row.repaid),
         remaining: toNumber(row.remaining),
         photo_url: await uploadPhoto(row),
-        source: row.source || 'local',
     });
 }
 
 const loans = loansResult.rows.map(row => ({
-    id: row.id,
-    debtor_id: row.debtor_id,
+    legacyDebtorId: row.debtor_id,
     amount: toNumber(row.amount),
     loan_date: row.loan_date,
     due_date: row.due_date,
     notes: row.notes,
-    source: row.source || 'local',
 }));
 
 const repayments = repaymentsResult.rows.map(row => ({
-    id: row.id,
-    debtor_id: row.debtor_id,
+    legacyDebtorId: row.debtor_id,
     amount: toNumber(row.amount),
     repayment_date: row.repayment_date,
-    source: row.source || 'local',
 }));
 
-await replaceTable('repayments', []);
-await replaceTable('loans', []);
-await replaceTable('debtors', []);
+await clearTable('repayments');
+await clearTable('loans');
+await clearTable('debtors');
 
-await insertRows('debtors', debtors);
-await insertRows('loans', loans);
-await insertRows('repayments', repayments);
+const debtorIdMap = await insertDebtors(debtors);
+await insertRows(
+    'loans',
+    loans
+        .map(row => ({
+            debtor_id: debtorIdMap.get(String(row.legacyDebtorId)),
+            amount: row.amount,
+            loan_date: row.loan_date,
+            due_date: row.due_date,
+            notes: row.notes,
+        }))
+        .filter(row => row.debtor_id),
+);
+await insertRows(
+    'repayments',
+    repayments
+        .map(row => ({
+            debtor_id: debtorIdMap.get(String(row.legacyDebtorId)),
+            amount: row.amount,
+            repayment_date: row.repayment_date,
+        }))
+        .filter(row => row.debtor_id),
+);
 
 await pool.end();
 
 console.log(`Seeded Supabase: ${debtors.length} debtors, ${loans.length} loans, ${repayments.length} repayments.`);
 
-async function replaceTable(tableName) {
-    const {error} = await supabase.from(tableName).delete().neq('id', '__never__');
+async function clearTable(tableName) {
+    const {error} = await supabase.from(tableName).delete().gte('id', 0);
     if (error) {
         throw new Error(`Failed to clear ${tableName}: ${error.message}`);
     }
+}
+
+async function insertDebtors(rows) {
+    const debtorIdMap = new Map();
+
+    for (const {legacyId, ...row} of rows) {
+        const {data, error} = await supabase.from('debtors').insert(row).select('id').single();
+        if (error) {
+            throw new Error(`Failed to seed debtors: ${error.message}`);
+        }
+        debtorIdMap.set(String(legacyId), data.id);
+    }
+
+    return debtorIdMap;
 }
 
 async function insertRows(tableName, rows) {
@@ -99,7 +128,7 @@ async function insertRows(tableName, rows) {
         return;
     }
 
-    const {error} = await supabase.from(tableName).upsert(rows, {onConflict: 'id'});
+    const {error} = await supabase.from(tableName).insert(rows);
     if (error) {
         throw new Error(`Failed to seed ${tableName}: ${error.message}`);
     }

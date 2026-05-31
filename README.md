@@ -39,16 +39,15 @@ SUPABASE_SERVICE_ROLE_KEY=...
 npm run supabase:seed
 ```
 
-Seed читає локальний PostgreSQL, переносить `debtors`, `loans`, `repayments` і завантажує локальні фото в Supabase Storage bucket `debtor-photos`.
+Seed читає локальний PostgreSQL, переносить `debtors`, `loans`, `repayments` і завантажує локальні фото в Supabase Storage bucket `debtor-photos`. У Supabase всі `id` та `debtor_id` є `BIGINT`.
 
 ## Legacy Local Postgres
 
-Локальна PostgreSQL-версія залишена для імпорту/резерву:
+Локальна PostgreSQL-версія залишена тільки для резервного запуску:
 
 ```bash
 npm run db:start
 npm run db:migrate
-npm run db:import-airtable
 npm run dev:local-api
 ```
 
