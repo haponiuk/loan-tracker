@@ -1,4 +1,4 @@
-import {useEffect, useMemo, useState} from 'react';
+import {useEffect, useMemo, useRef, useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {hasSupabaseConfig, supabase} from './supabase.js';
 import './style.css';
@@ -7,14 +7,14 @@ function LoanTrackerApp() {
     const {addDebtor, debtors, error, isLoading} = useDebtors();
 
     if (isLoading) {
-        return <StatusScreen title="Завантажую дані" text="Підключаюся до Supabase." />;
+        return <StatusScreen title="Завантаження даних" text="Підключаюся до Supabase та завантажую профілі..." />;
     }
 
     if (error) {
         return (
             <StatusScreen
                 title="Не вдалося завантажити дані"
-                text={`${error.message}. Перевір Supabase URL, publishable key і таблиці.`}
+                text={`${error.message}. Перевірте налаштування Supabase (URL, publishable key) та структуру таблиць.`}
             />
         );
     }
@@ -143,6 +143,29 @@ function LoanDashboard({debtors, onAddDebtor}) {
     const [isAddPersonOpen, setIsAddPersonOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedRecordId, setSelectedRecordId] = useState(null);
+    const searchRef = useRef(null);
+
+    // Keyboard shortcut listener to focus search input using '/'
+    useEffect(() => {
+        function handleKeyDown(event) {
+            if (
+                event.key === '/' &&
+                document.activeElement?.tagName !== 'INPUT' &&
+                document.activeElement?.tagName !== 'TEXTAREA'
+            ) {
+                event.preventDefault();
+                searchRef.current?.focus();
+            }
+            if (event.key === 'Escape' && document.activeElement === searchRef.current) {
+                searchRef.current?.blur();
+            }
+        }
+
+        document.addEventListener('keydown', handleKeyDown);
+        return () => {
+            document.removeEventListener('keydown', handleKeyDown);
+        };
+    }, []);
 
     const filteredDebtors = useMemo(() => {
         const normalizedSearch = searchTerm.trim().toLowerCase();
@@ -156,13 +179,20 @@ function LoanDashboard({debtors, onAddDebtor}) {
     const selectedDebtor =
         debtors.find(debtor => debtor.id === selectedRecordId) ?? filteredDebtors[0] ?? debtors[0];
 
+    const totalRemaining = sumBy(debtors, 'remaining');
+    const totalBorrowed = sumBy(debtors, 'borrowed');
+    const totalRepaid = sumBy(debtors, 'repaid');
+
     return (
         <main className="loan-shell">
             <aside className="people-panel">
                 <section className="panel-header">
-                    <div>
-                        <p className="eyebrow">Finance</p>
-                        <h1>Хлопці</h1>
+                    <div className="brand-group">
+                        <span className="brand-badge">LT</span>
+                        <div>
+                            <p className="eyebrow">Облік позик</p>
+                            <h1>Хлопці <span className="header-counter">{debtors.length}</span></h1>
+                        </div>
                     </div>
                     <button
                         aria-label="Додати людину"
@@ -170,26 +200,32 @@ function LoanDashboard({debtors, onAddDebtor}) {
                         onClick={() => setIsAddPersonOpen(true)}
                         type="button"
                     >
-                        <span aria-hidden="true">+</span>
-                        Додати людину
+                        <svg className="button-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                        </svg>
+                        <span>Додати</span>
                     </button>
                 </section>
 
                 <section className="summary-strip" aria-label="Загальна статистика">
-                    <MetricTile label="Борг" value={formatMoney(sumBy(debtors, 'remaining'))} />
-                    <MetricTile label="Позичено" value={formatMoney(sumBy(debtors, 'borrowed'))} />
-                    <MetricTile label="Повернено" value={formatMoney(sumBy(debtors, 'repaid'))} />
+                    <MetricTile label="Активний борг" value={formatMoney(totalRemaining)} type="remaining" />
+                    <MetricTile label="Позичено" value={formatMoney(totalBorrowed)} type="borrowed" />
+                    <MetricTile label="Повернено" value={formatMoney(totalRepaid)} type="repaid" />
                 </section>
 
                 <section className="toolbar" aria-label="Пошук">
-                    <label className="search-box">
-                        <span aria-hidden="true">⌕</span>
+                    <div className="search-box">
+                        <svg className="search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
                         <input
+                            ref={searchRef}
                             value={searchTerm}
                             onChange={event => setSearchTerm(event.target.value)}
-                            placeholder="Пошук..."
+                            placeholder="Шукати боржника..."
                         />
-                    </label>
+                        <span className="hotkey-badge">/</span>
+                    </div>
                 </section>
 
                 <section className="people-list" aria-label="Список боржників">
@@ -204,16 +240,23 @@ function LoanDashboard({debtors, onAddDebtor}) {
                         >
                             <Avatar debtor={debtor} />
                             <span className="person-copy">
-                                <strong>{debtor.name}</strong>
-                                <span className="money-value">{formatMoney(debtor.remaining)}</span>
+                                <strong className="person-name">{debtor.name}</strong>
+                                <span className={`money-value ${debtor.remaining > 0 ? 'has-debt' : 'no-debt'}`}>
+                                    {formatMoney(debtor.remaining)}
+                                </span>
                             </span>
-                            <span className={debtor.remaining > 0 ? 'status-dot due' : 'status-dot'} />
+                            <div className="status-indicator">
+                                <span className={debtor.remaining > 0 ? 'status-dot due' : 'status-dot'} />
+                            </div>
                         </button>
                     ))}
                     {filteredDebtors.length === 0 ? (
                         <div className="empty-state">
-                            <strong>Немає збігів</strong>
-                            <span>Спробуй інший пошук.</span>
+                            <svg className="empty-state-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+                            </svg>
+                            <strong>Нікого не знайдено</strong>
+                            <span>Спробуйте змінити запит пошуку.</span>
                         </div>
                     ) : null}
                 </section>
@@ -247,12 +290,28 @@ function AddPersonDialog({onClose, onCreate}) {
     });
     const [isSubmitting, setIsSubmitting] = useState(false);
 
+    // Keyboard hook to dismiss modal using Escape key
+    useEffect(() => {
+        function handleKeyDown(event) {
+            if (event.key === 'Escape') {
+                onClose();
+            }
+        }
+        document.addEventListener('keydown', handleKeyDown);
+        // Disable document scroll under overlay
+        document.body.classList.add('modal-open');
+        return () => {
+            document.removeEventListener('keydown', handleKeyDown);
+            document.body.classList.remove('modal-open');
+        };
+    }, [onClose]);
+
     async function handleSubmit(event) {
         event.preventDefault();
         setError('');
 
         if (!formValues.firstName.trim() && !formValues.lastName.trim()) {
-            setError('Вкажи хоча б імʼя або прізвище.');
+            setError('Вкажіть хоча б імʼя або прізвище.');
             return;
         }
 
@@ -274,21 +333,30 @@ function AddPersonDialog({onClose, onCreate}) {
         }));
     }
 
+    // Handles modal backdrop click
+    function handleBackdropClick(event) {
+        if (event.target === event.currentTarget) {
+            onClose();
+        }
+    }
+
     return (
-        <div className="dialog-backdrop" role="presentation">
+        <div className="dialog-backdrop" onClick={handleBackdropClick} role="presentation">
             <form className="person-dialog" onSubmit={handleSubmit}>
                 <div className="dialog-head">
                     <div>
-                        <p className="eyebrow">Новий боржник</p>
+                        <p className="eyebrow">Карта профілю</p>
                         <h2>Додати людину</h2>
                     </div>
                     <button aria-label="Закрити" className="icon-button" onClick={onClose} type="button">
-                        ×
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
                     </button>
                 </div>
 
                 <div className="form-grid">
-                    <label>
+                    <label className="form-field">
                         <span>Імʼя</span>
                         <input
                             autoFocus
@@ -297,7 +365,7 @@ function AddPersonDialog({onClose, onCreate}) {
                             value={formValues.firstName}
                         />
                     </label>
-                    <label>
+                    <label className="form-field">
                         <span>Прізвище</span>
                         <input
                             onChange={event => updateField('lastName', event.target.value)}
@@ -305,24 +373,38 @@ function AddPersonDialog({onClose, onCreate}) {
                             value={formValues.lastName}
                         />
                     </label>
-                    <label className="wide-field">
+                    <label className="form-field wide-field">
                         <span>Фото URL</span>
                         <input
                             onChange={event => updateField('photoUrl', event.target.value)}
-                            placeholder="https://..."
+                            placeholder="https://images.unsplash.com/photo-..."
                             value={formValues.photoUrl}
                         />
                     </label>
                 </div>
 
-                {error ? <div className="form-error">{error}</div> : null}
+                {error ? (
+                    <div className="form-error">
+                        <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                        <span>{error}</span>
+                    </div>
+                ) : null}
 
                 <div className="dialog-actions">
                     <button className="secondary-button" onClick={onClose} type="button">
                         Скасувати
                     </button>
                     <button className="primary-button" disabled={isSubmitting} type="submit">
-                        {isSubmitting ? 'Додаю...' : 'Додати'}
+                        {isSubmitting ? (
+                            <>
+                                <span className="spinner" />
+                                <span>Додаю...</span>
+                            </>
+                        ) : (
+                            'Додати людину'
+                        )}
                     </button>
                 </div>
             </form>
@@ -336,8 +418,8 @@ function DebtorDetail({debtor}) {
     return (
         <article className="debtor-detail">
             <header className="detail-hero">
-                <div>
-                    <p className="eyebrow">Профіль боржника</p>
+                <div className="profile-identity">
+                    <p className="eyebrow">Картка боржника</p>
                     <h2>{debtor.name}</h2>
                 </div>
                 <RatingBadge rating={rating} />
@@ -348,32 +430,36 @@ function DebtorDetail({debtor}) {
                     {debtor.photoUrl ? (
                         <img src={debtor.photoUrl} alt={debtor.name} />
                     ) : (
-                        <div className="photo-placeholder">{getInitials(debtor.name)}</div>
+                        <div className="photo-placeholder">
+                            <span>{getInitials(debtor.name)}</span>
+                        </div>
                     )}
                 </div>
 
                 <div className="ledger-card">
-                    <MetricRow label="Загалом Позичив" value={formatMoney(debtor.borrowed)} />
-                    <MetricRow label="Загалом Повернув" value={formatMoney(debtor.repaid)} />
-                    <MetricRow label="Активний борг" value={formatMoney(debtor.remaining)} accent />
+                    <MetricRow label="Загалом позичено" value={formatMoney(debtor.borrowed)} type="borrowed" />
+                    <MetricRow label="Загалом повернуто" value={formatMoney(debtor.repaid)} type="repaid" />
+                    <MetricRow label="Активний борг" value={formatMoney(debtor.remaining)} accent type="remaining" />
                 </div>
             </section>
 
             <section className="activity-grid">
                 <ActivityList
                     title="Позики"
-                    emptyLabel="Позик ще немає"
+                    emptyLabel="Позики відсутні"
                     items={debtor.loans}
                     amountKey="amount"
                     dateKey="date"
                     noteKey="notes"
+                    type="loan"
                 />
                 <ActivityList
                     title="Повернення"
-                    emptyLabel="Повернень ще немає"
+                    emptyLabel="Повернення відсутні"
                     items={debtor.repayments}
                     amountKey="amount"
                     dateKey="date"
+                    type="repayment"
                 />
             </section>
 
@@ -402,14 +488,14 @@ function RatingSection({rating}) {
     return (
         <section className="rating-section" aria-label="Розрахунок рейтингу боржника">
             <div className="rating-head">
-                <div>
-                    <p className="eyebrow">Розрахунок</p>
+                <div className="rating-title-block">
+                    <p className="eyebrow">Аналітика ризиків</p>
                     <h3>Рейтинг боржника</h3>
                 </div>
                 <div className={`rating-score-card rating-${rating.tone}`}>
-                    <div>
+                    <div className="score-details">
                         <span>Загальний бал</span>
-                        <strong>{rating.score}/100</strong>
+                        <strong>{rating.score}<span>/100</span></strong>
                         <em>{rating.label}</em>
                     </div>
                     <RatingIcon tone={rating.tone} />
@@ -419,14 +505,14 @@ function RatingSection({rating}) {
             <div className="rating-grid">
                 {rating.factors.map(factor => (
                     <div className="rating-factor" key={factor.key}>
-                        <div>
+                        <div className="factor-header">
                             <span>{factor.label}</span>
-                            <strong>{factor.value}</strong>
+                            <strong className="factor-value">{factor.value}</strong>
                         </div>
                         <div className="rating-bar" aria-hidden="true">
                             <span style={{width: `${factor.score}%`}} />
                         </div>
-                        <p>{factor.note}</p>
+                        <p className="factor-note">{factor.note}</p>
                     </div>
                 ))}
             </div>
@@ -442,17 +528,17 @@ function RatingIcon({tone}) {
             <svg viewBox="0 0 42 46" role="img" focusable="false">
                 <path d="M21 2 37 8v13c0 10.8-6.5 18.4-16 22-9.5-3.6-16-11.2-16-22V8l16-6Z" />
             </svg>
-            <span>{iconMark}</span>
+            <span className="icon-character">{iconMark}</span>
         </span>
     );
 }
 
-function ActivityList({title, emptyLabel, items, amountKey, dateKey, noteKey}) {
+function ActivityList({title, emptyLabel, items, amountKey, dateKey, noteKey, type}) {
     return (
         <div className="activity-card">
             <div className="activity-title">
                 <h3>{title}</h3>
-                <span>{items.length}</span>
+                <span className="activity-badge">{items.length}</span>
             </div>
             {items.length === 0 ? (
                 <div className="muted-empty">{emptyLabel}</div>
@@ -460,13 +546,25 @@ function ActivityList({title, emptyLabel, items, amountKey, dateKey, noteKey}) {
                 <div className="activity-list">
                     {items.map(item => (
                         <div className="activity-row" key={item.id}>
-                            <div>
-                                <strong className="money-value">{formatMoney(item[amountKey])}</strong>
-                                <span>{formatDate(item[dateKey])}</span>
-                                {noteKey && item[noteKey] ? <em>{item[noteKey]}</em> : null}
+                            <div className="activity-content">
+                                <div className="activity-primary-line">
+                                    <strong className="money-value">{formatMoney(item[amountKey])}</strong>
+                                    <span className="activity-date">{formatDate(item[dateKey])}</span>
+                                </div>
+                                {noteKey && item[noteKey] ? <p className="activity-notes">{item[noteKey]}</p> : null}
                                 {item.files?.length ? <FileList files={item.files} /> : null}
                             </div>
-                            <span className="activity-mark" />
+                            <div className={`activity-indicator ${type}`}>
+                                {type === 'loan' ? (
+                                    <svg className="activity-svg warning" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 19.5l15-15m0 0H8.25m11.25 0v11.25" />
+                                    </svg>
+                                ) : (
+                                    <svg className="activity-svg success" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 4.5l-15 15m0 0h11.25m-11.25 0V8.25" />
+                                    </svg>
+                                )}
+                            </div>
                         </div>
                     ))}
                 </div>
@@ -478,29 +576,40 @@ function ActivityList({title, emptyLabel, items, amountKey, dateKey, noteKey}) {
 function FileList({files}) {
     return (
         <div className="loan-files" aria-label="Файли позики">
-            {files.map(file => (
-                <a href={file.url} target="_blank" rel="noreferrer" key={file.path || file.url}>
-                    <span aria-hidden="true">{file.type?.startsWith('image/') ? '▧' : '▤'}</span>
-                    {file.name || 'Файл'}
-                </a>
-            ))}
+            {files.map(file => {
+                const isImage = file.type?.startsWith('image/');
+                return (
+                    <a href={file.url} target="_blank" rel="noreferrer" key={file.path || file.url} className="file-chip">
+                        {isImage ? (
+                            <svg className="file-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                        ) : (
+                            <svg className="file-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                        )}
+                        <span>{file.name || 'Документ'}</span>
+                    </a>
+                );
+            })}
         </div>
     );
 }
 
-function MetricTile({label, value}) {
+function MetricTile({label, value, type}) {
     return (
-        <div>
-            <span>{label}</span>
+        <div className={`metric-tile ${type}`}>
+            <span className="metric-label">{label}</span>
             <strong className="money-value">{value}</strong>
         </div>
     );
 }
 
-function MetricRow({label, value, accent = false}) {
+function MetricRow({label, value, accent = false, type}) {
     return (
-        <div className={`metric-row ${accent ? 'accent' : ''}`}>
-            <span>{label}</span>
+        <div className={`metric-row ${accent ? 'accent' : ''} ${type}`}>
+            <span className="metric-label">{label}</span>
             <strong className="money-value">{value}</strong>
         </div>
     );
@@ -508,19 +617,32 @@ function MetricRow({label, value, accent = false}) {
 
 function Avatar({debtor}) {
     if (debtor.photoUrl) {
-        return <img className="avatar" src={debtor.photoUrl} alt="" />;
+        return (
+            <div className="avatar-container">
+                <img className="avatar" src={debtor.photoUrl} alt="" />
+            </div>
+        );
     }
 
-    return <span className="avatar initials">{getInitials(debtor.name)}</span>;
+    return (
+        <div className="avatar-container initials-bg">
+            <span className="avatar-initials">{getInitials(debtor.name)}</span>
+        </div>
+    );
 }
 
 function StatusScreen({title, text}) {
     return (
         <main className="setup-screen">
-            <div>
-                <p className="eyebrow">Loan Tracker</p>
+            <div className="status-card">
+                <div className="logo-pulse">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                </div>
+                <p className="eyebrow">Finance</p>
                 <h1>{title}</h1>
-                <p>{text}</p>
+                <p className="status-text">{text}</p>
             </div>
         </main>
     );
@@ -528,9 +650,14 @@ function StatusScreen({title, text}) {
 
 function NoDebtors() {
     return (
-        <div className="no-debtors">
+        <div className="no-debtors-panel">
+            <div className="empty-icon-wrapper">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
+                </svg>
+            </div>
             <h2>Немає людей</h2>
-            <p>Імпортуй дані в PostgreSQL, і вони з&apos;являться тут автоматично.</p>
+            <p>База даних порожня. Додайте профілі, щоб почати облік позик та аналіз ризиків.</p>
         </div>
     );
 }
@@ -785,6 +912,7 @@ function dateTime(value) {
     return dateOrToday(value, new Date(0)).getTime();
 }
 
+// Fixed date parsing helper
 function dateOrToday(value, fallbackDate) {
     if (!value) {
         return fallbackDate;
