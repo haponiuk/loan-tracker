@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import {randomUUID} from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import {createClient} from '@supabase/supabase-js';
@@ -9,6 +10,7 @@ const app = express();
 const port = Number(process.env.PORT) || 3001;
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const photoBucketName = process.env.SUPABASE_PHOTO_BUCKET || 'debtor-photos';
 const shouldUseSupabase = Boolean(supabaseUrl);
 const supabaseAdmin =
     supabaseUrl && serviceRoleKey
@@ -19,12 +21,19 @@ const supabaseAdmin =
               },
           })
         : null;
+let photoBucketReady = false;
 
 app.use(express.json({ limit: '10mb' }));
 app.use('/uploads', express.static('public/uploads'));
 
 app.post('/api/upload', async (request, response) => {
     try {
+        if (shouldUseSupabase) {
+            const upload = await createSupabasePhotoUpload(request.body || {});
+            response.status(201).json(upload);
+            return;
+        }
+
         const { fileName, fileData } = request.body || {};
         if (!fileName || !fileData) {
             return response.status(400).json({ error: 'Відсутні дані файлу.' });
@@ -274,4 +283,63 @@ function isValidUrl(value) {
     } catch {
         return false;
     }
+}
+
+async function createSupabasePhotoUpload(input) {
+    if (!supabaseAdmin) {
+        throw new Error('Не задано SUPABASE_SERVICE_ROLE_KEY для завантаження фото в Supabase.');
+    }
+
+    const fileName = cleanText(input.fileName);
+    const contentType = cleanText(input.contentType) || 'image/jpeg';
+
+    if (!fileName) {
+        throw new Error('Відсутня назва файлу.');
+    }
+
+    if (!contentType.startsWith('image/')) {
+        throw new Error('Можна завантажувати тільки зображення.');
+    }
+
+    await ensurePhotoBucket();
+
+    const objectPath = `profiles/${Date.now()}-${randomUUID()}${getSafeExtension(fileName, contentType)}`;
+    const {data, error} = await supabaseAdmin.storage.from(photoBucketName).createSignedUploadUrl(objectPath);
+
+    if (error) {
+        throw new Error(error.message);
+    }
+
+    const {data: publicUrlData} = supabaseAdmin.storage.from(photoBucketName).getPublicUrl(objectPath);
+
+    return {
+        bucket: photoBucketName,
+        path: data.path,
+        token: data.token,
+        publicUrl: publicUrlData.publicUrl,
+    };
+}
+
+async function ensurePhotoBucket() {
+    if (photoBucketReady) {
+        return;
+    }
+
+    const {error} = await supabaseAdmin.storage.createBucket(photoBucketName, {
+        public: true,
+        fileSizeLimit: 1024 * 1024 * 10,
+    });
+
+    if (error && !/already exists|Duplicate/i.test(error.message)) {
+        throw new Error(error.message);
+    }
+
+    photoBucketReady = true;
+}
+
+function getSafeExtension(fileName, contentType) {
+    const fromName = fileName.match(/\.([a-z0-9]{1,8})$/i)?.[1]?.toLowerCase();
+    const fromType = contentType.split('/')[1]?.split(';')[0]?.toLowerCase();
+    const ext = fromName || fromType || 'jpg';
+    return `.${ext.replace(/[^a-z0-9]/gi, '') || 'jpg'}`;
 }

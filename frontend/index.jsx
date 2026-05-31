@@ -334,24 +334,33 @@ function AddPersonDialog({onClose, onCreate}) {
             let uploadedPhotoUrl = '';
             if (selectedFile) {
                 if (hasSupabaseConfig && supabase) {
-                    const fileExt = selectedFile.name.split('.').pop() || 'jpg';
-                    const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
+                    const uploadResponse = await fetch('/api/upload', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            fileName: selectedFile.name,
+                            contentType: selectedFile.type,
+                        }),
+                    });
+
+                    if (!uploadResponse.ok) {
+                        const payload = await uploadResponse.json().catch(() => ({}));
+                        throw new Error(payload.error || 'Помилка підготовки завантаження фото.');
+                    }
+
+                    const uploadPayload = await uploadResponse.json();
                     const {error: uploadError} = await supabase.storage
-                        .from('debtor-photos')
-                        .upload(fileName, selectedFile, {
+                        .from(uploadPayload.bucket)
+                        .uploadToSignedUrl(uploadPayload.path, uploadPayload.token, selectedFile, {
                             cacheControl: '3600',
-                            upsert: false,
+                            contentType: selectedFile.type,
                         });
 
                     if (uploadError) {
                         throw new Error(`Помилка завантаження фото в Supabase: ${uploadError.message}`);
                     }
 
-                    const {data: publicUrlData} = supabase.storage
-                        .from('debtor-photos')
-                        .getPublicUrl(fileName);
-
-                    uploadedPhotoUrl = publicUrlData.publicUrl;
+                    uploadedPhotoUrl = uploadPayload.publicUrl;
                 } else {
                     const base64Data = await toBase64(selectedFile);
                     const response = await fetch('/api/upload', {
