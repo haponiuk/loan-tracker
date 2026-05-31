@@ -141,10 +141,10 @@ function LoanDashboard({debtors}) {
                         <p className="eyebrow">Finance</p>
                         <h1>Хлопці</h1>
                     </div>
-                    <div className="balance-pill">
-                        <span>{debtors.length}</span>
-                        людей
-                    </div>
+                    <button className="add-person-button" type="button">
+                        <span aria-hidden="true">+</span>
+                        Додати людину
+                    </button>
                 </section>
 
                 <section className="summary-strip" aria-label="Загальна статистика">

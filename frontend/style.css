@@ -98,28 +98,53 @@ h1 {
     letter-spacing: 0;
 }
 
-.balance-pill {
+.add-person-button {
     display: inline-flex;
     align-items: center;
     gap: 8px;
+    flex: 0 0 auto;
     border: 1px solid rgba(15, 138, 75, 0.18);
     border-radius: 999px;
-    padding: 8px 12px;
+    padding: 10px 14px;
     background: #eef8f2;
     color: #235b3d;
+    cursor: pointer;
     font-family: ui-sans-serif, system-ui, sans-serif;
-    font-size: 12px;
-    font-weight: 700;
+    font-size: 13px;
+    font-weight: 800;
+    line-height: 1;
+    transition:
+        border-color 160ms ease,
+        background 160ms ease,
+        color 160ms ease,
+        transform 160ms ease;
 }
 
-.balance-pill span {
+.add-person-button:hover {
+    border-color: rgba(15, 138, 75, 0.34);
+    background: #e4f5ec;
+    color: #154c31;
+}
+
+.add-person-button:active {
+    transform: translateY(1px);
+}
+
+.add-person-button:focus-visible {
+    outline: 2px solid var(--blue);
+    outline-offset: 3px;
+}
+
+.add-person-button span {
     display: grid;
-    width: 24px;
-    height: 24px;
+    width: 22px;
+    height: 22px;
     place-items: center;
     border-radius: 50%;
     background: var(--green);
     color: white;
+    font-size: 18px;
+    line-height: 1;
 }
 
 .summary-strip {
