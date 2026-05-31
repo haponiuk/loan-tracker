@@ -26,21 +26,75 @@ export default async function handler(request, response) {
     }
 
     try {
-        const input = normalizeDebtorInput(request.body || {});
-        const {data, error} = await supabase
-            .from('debtors')
-            .insert(input)
-            .select('id, full_name, first_name, last_name, borrowed, repaid, remaining, photo_url')
-            .single();
-
-        if (error) {
-            throw new Error(error.message);
-        }
+        const input = normalizeDebtorInput(parseRequestBody(request.body));
+        const data = await insertDebtor(input);
 
         response.status(201).json({debtor: mapDebtor(data)});
     } catch (error) {
         response.status(400).json({error: error.message});
     }
+}
+
+function parseRequestBody(body) {
+    if (!body) {
+        return {};
+    }
+
+    if (typeof body === 'string') {
+        return JSON.parse(body);
+    }
+
+    return body;
+}
+
+async function insertDebtor(input) {
+    const {data, error} = await supabase
+        .from('debtors')
+        .insert(input)
+        .select('id, full_name, first_name, last_name, borrowed, repaid, remaining, photo_url')
+        .single();
+
+    if (!error) {
+        return data;
+    }
+
+    if (!isMissingIdDefaultError(error)) {
+        throw new Error(error.message);
+    }
+
+    const fallbackInput = {
+        ...input,
+        id: await getNextDebtorId(),
+    };
+    const retry = await supabase
+        .from('debtors')
+        .insert(fallbackInput)
+        .select('id, full_name, first_name, last_name, borrowed, repaid, remaining, photo_url')
+        .single();
+
+    if (retry.error) {
+        throw new Error(retry.error.message);
+    }
+
+    return retry.data;
+}
+
+async function getNextDebtorId() {
+    const {data, error} = await supabase
+        .from('debtors')
+        .select('id')
+        .order('id', {ascending: false})
+        .limit(1);
+
+    if (error) {
+        throw new Error(error.message);
+    }
+
+    return Number(data?.[0]?.id || 0) + 1;
+}
+
+function isMissingIdDefaultError(error) {
+    return error?.code === '23502' && error?.message?.includes('column "id"');
 }
 
 function normalizeDebtorInput(input) {

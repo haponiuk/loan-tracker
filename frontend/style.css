@@ -145,47 +145,49 @@ button {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 32px 28px 20px;
-    gap: 16px;
+    padding: 20px 20px 14px;
+    gap: 12px;
 }
 
 .brand-group {
     display: flex;
     align-items: center;
-    gap: 14px;
+    gap: 10px;
+    min-width: 0;
 }
 
 .brand-badge {
     display: grid;
     place-items: center;
-    width: 38px;
-    height: 38px;
-    border-radius: var(--radius-md);
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
+    border-radius: var(--radius-sm);
     background: linear-gradient(135deg, var(--primary), #818cf8);
     color: #ffffff;
     font-family: var(--font-display);
     font-weight: 800;
-    font-size: 14px;
+    font-size: 12px;
     box-shadow: 0 4px 10px rgba(99, 102, 241, 0.2);
 }
 
 .eyebrow {
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.06em;
     color: var(--neutral-400);
-    margin-bottom: 2px;
+    margin-bottom: 1px;
 }
 
 .panel-header h1 {
-    font-size: 22px;
+    font-size: 18px;
     line-height: 1.1;
     font-weight: 800;
     letter-spacing: -0.01em;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
 }
 
 .header-counter {
@@ -205,14 +207,15 @@ button {
 .add-person-button {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    height: 36px;
-    padding: 0 14px;
+    gap: 5px;
+    height: 32px;
+    padding: 0 12px;
+    flex-shrink: 0;
     background: var(--primary);
     color: #ffffff;
     font-weight: 600;
-    font-size: 13px;
-    border-radius: var(--radius-md);
+    font-size: 12.5px;
+    border-radius: var(--radius-sm);
     box-shadow: 0 2px 6px rgba(99, 102, 241, 0.15);
     transition: background var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast);
 }
@@ -236,19 +239,21 @@ button {
 .summary-strip {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
-    padding: 0 28px 20px;
+    gap: 6px;
+    padding: 0 20px 14px;
 }
 
 .metric-tile {
     display: flex;
     flex-direction: column;
-    padding: 12px 14px;
+    padding: 8px 10px;
     background: var(--bg-card);
     border: var(--border-main);
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-sm);
     box-shadow: var(--shadow-sm);
     transition: transform var(--transition-normal);
+    min-width: 0;
+    overflow: hidden;
 }
 
 .metric-tile:hover {
@@ -256,17 +261,23 @@ button {
 }
 
 .metric-label {
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 600;
     color: var(--neutral-400);
-    margin-bottom: 6px;
+    margin-bottom: 3px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .metric-tile .money-value {
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 700;
     letter-spacing: -0.01em;
     color: var(--neutral-800);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .metric-tile.remaining .money-value {
@@ -876,20 +887,21 @@ button {
 .loan-files {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
-    margin-top: 8px;
+    gap: 4px;
+    margin-top: 6px;
 }
 
 .file-chip {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    padding: 4px 8px;
+    gap: 4px;
+    padding: 3px 7px;
+    max-width: 180px;
     background: var(--neutral-50);
     border: var(--border-main);
     border-radius: var(--radius-sm);
     color: var(--neutral-600);
-    font-size: 11.5px;
+    font-size: 11px;
     font-weight: 500;
     text-decoration: none;
     transition: border-color var(--transition-fast), color var(--transition-fast), background var(--transition-fast);
@@ -901,9 +913,17 @@ button {
     color: var(--primary);
 }
 
+.file-chip span {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    min-width: 0;
+}
+
 .file-icon {
-    width: 12px;
-    height: 12px;
+    width: 11px;
+    height: 11px;
+    flex-shrink: 0;
     color: var(--neutral-400);
 }
 

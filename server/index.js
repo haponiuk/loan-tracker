@@ -1,11 +1,24 @@
 import 'dotenv/config';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import {createClient} from '@supabase/supabase-js';
 import express from 'express';
 import {query} from './db.js';
 
 const app = express();
 const port = Number(process.env.PORT) || 3001;
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const shouldUseSupabase = Boolean(supabaseUrl);
+const supabaseAdmin =
+    supabaseUrl && serviceRoleKey
+        ? createClient(supabaseUrl, serviceRoleKey, {
+              auth: {
+                  persistSession: false,
+                  autoRefreshToken: false,
+              },
+          })
+        : null;
 
 app.use(express.json({ limit: '10mb' }));
 app.use('/uploads', express.static('public/uploads'));
@@ -96,16 +109,9 @@ app.get('/api/debtors', async (request, response) => {
 app.post('/api/debtors', async (request, response) => {
     try {
         const input = normalizeDebtorInput(request.body || {});
-        const result = await query(
-            `
-                INSERT INTO debtors (full_name, first_name, last_name, photo_url)
-                VALUES ($1, $2, $3, $4)
-                RETURNING id, full_name, first_name, last_name, borrowed, repaid, remaining, photo_url
-            `,
-            [input.fullName, input.firstName, input.lastName, input.photoUrl],
-        );
+        const debtor = shouldUseSupabase ? await insertSupabaseDebtor(input) : await insertLocalDebtor(input);
 
-        response.status(201).json({debtor: mapDebtor(result.rows[0])});
+        response.status(201).json({debtor});
     } catch (error) {
         response.status(400).json({error: error.message});
     }
@@ -149,6 +155,97 @@ function normalizeDebtorInput(input) {
         lastName: lastName || null,
         photoUrl: photoUrl || null,
     };
+}
+
+async function insertSupabaseDebtor(input) {
+    if (!supabaseAdmin) {
+        throw new Error('Не задано SUPABASE_SERVICE_ROLE_KEY для запису в Supabase.');
+    }
+
+    const {data, error} = await supabaseAdmin
+        .from('debtors')
+        .insert({
+            full_name: input.fullName,
+            first_name: input.firstName,
+            last_name: input.lastName,
+            photo_url: input.photoUrl,
+        })
+        .select('id, full_name, first_name, last_name, borrowed, repaid, remaining, photo_url')
+        .single();
+
+    if (!error) {
+        return mapDebtor(data);
+    }
+
+    if (!isMissingIdDefaultError(error)) {
+        throw new Error(error.message);
+    }
+
+    const retry = await supabaseAdmin
+        .from('debtors')
+        .insert({
+            id: await getNextSupabaseDebtorId(),
+            full_name: input.fullName,
+            first_name: input.firstName,
+            last_name: input.lastName,
+            photo_url: input.photoUrl,
+        })
+        .select('id, full_name, first_name, last_name, borrowed, repaid, remaining, photo_url')
+        .single();
+
+    if (retry.error) {
+        throw new Error(retry.error.message);
+    }
+
+    return mapDebtor(retry.data);
+}
+
+async function insertLocalDebtor(input) {
+    let result;
+
+    try {
+        result = await query(
+            `
+                INSERT INTO debtors (full_name, first_name, last_name, photo_url)
+                VALUES ($1, $2, $3, $4)
+                RETURNING id, full_name, first_name, last_name, borrowed, repaid, remaining, photo_url
+            `,
+            [input.fullName, input.firstName, input.lastName, input.photoUrl],
+        );
+    } catch (error) {
+        if (!isMissingIdDefaultError(error)) {
+            throw error;
+        }
+
+        result = await query(
+            `
+                INSERT INTO debtors (id, full_name, first_name, last_name, photo_url)
+                VALUES ((SELECT COALESCE(MAX(id), 0) + 1 FROM debtors), $1, $2, $3, $4)
+                RETURNING id, full_name, first_name, last_name, borrowed, repaid, remaining, photo_url
+            `,
+            [input.fullName, input.firstName, input.lastName, input.photoUrl],
+        );
+    }
+
+    return mapDebtor(result.rows[0]);
+}
+
+async function getNextSupabaseDebtorId() {
+    const {data, error} = await supabaseAdmin
+        .from('debtors')
+        .select('id')
+        .order('id', {ascending: false})
+        .limit(1);
+
+    if (error) {
+        throw new Error(error.message);
+    }
+
+    return Number(data?.[0]?.id || 0) + 1;
+}
+
+function isMissingIdDefaultError(error) {
+    return error?.code === '23502' && error?.message?.includes('column "id"');
 }
 
 function mapDebtor(row) {
