@@ -1541,3 +1541,95 @@ button {
         height: 42px;
     }
 }
+
+/* ==========================================================================
+   IMAGE UPLOAD ZONE & PREVIEW CUSTOM STYLES
+   ========================================================================== */
+.file-upload-zone {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: var(--neutral-50);
+    border: 2px dashed var(--neutral-200);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    text-align: center;
+    transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.file-upload-zone:hover {
+    background: rgba(99, 102, 241, 0.02);
+    border-color: var(--primary-border);
+}
+
+.upload-zone-icon {
+    width: 28px;
+    height: 28px;
+    color: var(--neutral-400);
+    margin-bottom: 8px;
+    transition: color var(--transition-fast);
+}
+
+.file-upload-zone:hover .upload-zone-icon {
+    color: var(--primary);
+}
+
+.upload-zone-text {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--neutral-700);
+    margin-bottom: 2px;
+}
+
+.upload-zone-subtext {
+    font-size: 11px;
+    color: var(--neutral-400);
+}
+
+.image-preview-container {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 12px;
+    background: var(--neutral-50);
+    border: var(--border-main);
+    border-radius: var(--radius-md);
+}
+
+.uploaded-preview {
+    width: 64px;
+    height: 64px;
+    object-fit: cover;
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-sm);
+    border: var(--border-main);
+}
+
+.clear-preview-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 32px;
+    padding: 0 12px;
+    background: #ffffff;
+    border: var(--border-main);
+    border-radius: var(--radius-sm);
+    color: var(--danger-text);
+    font-size: 12.5px;
+    font-weight: 600;
+    box-shadow: var(--shadow-sm);
+    transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.clear-preview-btn:hover {
+    background: var(--danger-light);
+    border-color: var(--danger-border);
+}
+
+.clear-preview-btn svg {
+    width: 14px;
+    height: 14px;
+}
+

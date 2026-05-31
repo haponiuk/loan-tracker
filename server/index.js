@@ -1,12 +1,35 @@
 import 'dotenv/config';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import express from 'express';
 import {query} from './db.js';
 
 const app = express();
 const port = Number(process.env.PORT) || 3001;
 
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 app.use('/uploads', express.static('public/uploads'));
+
+app.post('/api/upload', async (request, response) => {
+    try {
+        const { fileName, fileData } = request.body || {};
+        if (!fileName || !fileData) {
+            return response.status(400).json({ error: 'Відсутні дані файлу.' });
+        }
+
+        const buffer = Buffer.from(fileData, 'base64');
+        const fileExt = path.extname(fileName) || '.jpg';
+        const uniqueName = `${Date.now()}_${Math.random().toString(36).substring(2, 7)}${fileExt}`;
+
+        const uploadDir = path.resolve('public/uploads');
+        await fs.mkdir(uploadDir, { recursive: true });
+        await fs.writeFile(path.join(uploadDir, uniqueName), buffer);
+
+        response.json({ url: `/uploads/${uniqueName}` });
+    } catch (error) {
+        response.status(500).json({ error: error.message });
+    }
+});
 
 app.get('/api/health', async (request, response) => {
     try {

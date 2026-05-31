@@ -286,8 +286,9 @@ function AddPersonDialog({onClose, onCreate}) {
     const [formValues, setFormValues] = useState({
         firstName: '',
         lastName: '',
-        photoUrl: '',
     });
+    const [selectedFile, setSelectedFile] = useState(null);
+    const [filePreview, setFilePreview] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     // Keyboard hook to dismiss modal using Escape key
@@ -306,6 +307,18 @@ function AddPersonDialog({onClose, onCreate}) {
         };
     }, [onClose]);
 
+    function toBase64(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = () => {
+                const base64 = reader.result.split(',')[1];
+                resolve(base64);
+            };
+            reader.onerror = error => reject(error);
+        });
+    }
+
     async function handleSubmit(event) {
         event.preventDefault();
         setError('');
@@ -318,7 +331,53 @@ function AddPersonDialog({onClose, onCreate}) {
         setIsSubmitting(true);
 
         try {
-            await onCreate(formValues);
+            let uploadedPhotoUrl = '';
+            if (selectedFile) {
+                if (hasSupabaseConfig && supabase) {
+                    const fileExt = selectedFile.name.split('.').pop() || 'jpg';
+                    const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
+                    const {error: uploadError} = await supabase.storage
+                        .from('debtor-photos')
+                        .upload(fileName, selectedFile, {
+                            cacheControl: '3600',
+                            upsert: false,
+                        });
+
+                    if (uploadError) {
+                        throw new Error(`Помилка завантаження фото в Supabase: ${uploadError.message}`);
+                    }
+
+                    const {data: publicUrlData} = supabase.storage
+                        .from('debtor-photos')
+                        .getPublicUrl(fileName);
+
+                    uploadedPhotoUrl = publicUrlData.publicUrl;
+                } else {
+                    const base64Data = await toBase64(selectedFile);
+                    const response = await fetch('/api/upload', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            fileName: selectedFile.name,
+                            fileData: base64Data,
+                        }),
+                    });
+
+                    if (!response.ok) {
+                        const payload = await response.json().catch(() => ({}));
+                        throw new Error(payload.error || 'Помилка завантаження фото на сервер.');
+                    }
+
+                    const payload = await response.json();
+                    uploadedPhotoUrl = payload.url;
+                }
+            }
+
+            await onCreate({
+                firstName: formValues.firstName,
+                lastName: formValues.lastName,
+                photoUrl: uploadedPhotoUrl || '',
+            });
         } catch (submitError) {
             setError(submitError.message);
         } finally {
@@ -331,6 +390,23 @@ function AddPersonDialog({onClose, onCreate}) {
             ...currentValues,
             [fieldName]: value,
         }));
+    }
+
+    function handleFileChange(event) {
+        const file = event.target.files?.[0];
+        if (file) {
+            if (!file.type.startsWith('image/')) {
+                setError('Будь ласка, виберіть зображення.');
+                return;
+            }
+            if (file.size > 5 * 1024 * 1024) {
+                setError('Розмір фото не повинен перевищувати 5MB.');
+                return;
+            }
+            setSelectedFile(file);
+            setFilePreview(URL.createObjectURL(file));
+            setError('');
+        }
     }
 
     // Handles modal backdrop click
@@ -373,14 +449,42 @@ function AddPersonDialog({onClose, onCreate}) {
                             value={formValues.lastName}
                         />
                     </label>
-                    <label className="form-field wide-field">
-                        <span>Фото URL</span>
-                        <input
-                            onChange={event => updateField('photoUrl', event.target.value)}
-                            placeholder="https://images.unsplash.com/photo-..."
-                            value={formValues.photoUrl}
-                        />
-                    </label>
+                    <div className="form-field wide-field">
+                        <span>Фото профілю</span>
+                        {filePreview ? (
+                            <div className="image-preview-container">
+                                <img src={filePreview} alt="Попередній перегляд" className="uploaded-preview" />
+                                <button
+                                    type="button"
+                                    className="clear-preview-btn"
+                                    onClick={() => {
+                                        setSelectedFile(null);
+                                        setFilePreview('');
+                                    }}
+                                >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                    <span>Видалити</span>
+                                </button>
+                            </div>
+                        ) : (
+                            <label className="file-upload-zone">
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={handleFileChange}
+                                    className="hidden-file-input"
+                                    style={{display: 'none'}}
+                                />
+                                <svg className="upload-zone-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                </svg>
+                                <span className="upload-zone-text">Виберіть фото профілю</span>
+                                <span className="upload-zone-subtext">PNG, JPG, WEBP до 5MB</span>
+                            </label>
+                        )}
+                    </div>
                 </div>
 
                 {error ? (

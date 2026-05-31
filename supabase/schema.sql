@@ -80,8 +80,21 @@ CREATE POLICY "Public read debtor photos"
     TO anon, authenticated
     USING (bucket_id = 'debtor-photos');
 
+CREATE POLICY "Public insert debtor photos"
+    ON storage.objects
+    FOR INSERT
+    TO anon, authenticated
+    WITH CHECK (bucket_id = 'debtor-photos');
+
 CREATE POLICY "Public read loan files"
     ON storage.objects
     FOR SELECT
     TO anon, authenticated
     USING (bucket_id = 'loan-files');
+
+CREATE POLICY "Public insert loan files"
+    ON storage.objects
+    FOR INSERT
+    TO anon, authenticated
+    WITH CHECK (bucket_id = 'loan-files');
+
