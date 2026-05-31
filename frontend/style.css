@@ -578,6 +578,42 @@ h1 {
     font-style: normal;
 }
 
+.loan-files {
+    display: flex !important;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.loan-files a {
+    display: inline-flex;
+    max-width: 100%;
+    align-items: center;
+    gap: 7px;
+    border: 1px solid #d8e3ef;
+    border-radius: 8px;
+    padding: 7px 9px;
+    background: #f6fbff;
+    color: var(--ink);
+    font-family: ui-sans-serif, system-ui, sans-serif;
+    font-size: 12px;
+    font-weight: 800;
+    line-height: 1;
+    text-decoration: none;
+}
+
+.loan-files a:hover {
+    border-color: #a9c9e7;
+    background: #edf7ff;
+}
+
+.loan-files a span {
+    overflow: visible;
+    color: #1976b8;
+    font-size: 13px;
+    line-height: 1;
+}
+
 .activity-mark {
     width: 9px;
     height: 34px;

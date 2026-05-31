@@ -26,7 +26,7 @@ app.get('/api/debtors', async (request, response) => {
                 ORDER BY remaining DESC, full_name ASC
             `),
             query(`
-                SELECT id, debtor_id, amount, loan_date, due_date, notes
+                SELECT id, debtor_id, amount, loan_date, due_date, notes, files
                 FROM loans
                 ORDER BY loan_date DESC NULLS LAST, id DESC
             `),
@@ -43,6 +43,7 @@ app.get('/api/debtors', async (request, response) => {
             date: row.loan_date,
             dueDate: row.due_date,
             notes: row.notes || '',
+            files: Array.isArray(row.files) ? row.files : [],
         }));
         const repaymentsByDebtor = groupByDebtor(repaymentsResult.rows, row => ({
             id: row.id,

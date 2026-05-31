@@ -1,6 +1,6 @@
 # Loan Tracker
 
-React/Vite застосунок для перегляду боржників, позик, повернень і рейтингу боржника.
+React/Vite застосунок для перегляду боржників, позик, файлів позик, повернень і рейтингу боржника.
 
 Продакшн-архітектура:
 
@@ -39,7 +39,7 @@ SUPABASE_SERVICE_ROLE_KEY=...
 npm run supabase:seed
 ```
 
-Seed читає локальний PostgreSQL, переносить `debtors`, `loans`, `repayments` і завантажує локальні фото в Supabase Storage bucket `debtor-photos`. У Supabase всі `id` та `debtor_id` є `BIGINT`.
+Seed читає локальний PostgreSQL, переносить `debtors`, `loans`, `repayments` і завантажує локальні фото в Supabase Storage bucket `debtor-photos`. Файли позик зберігаються в `loans.files` як JSONB і в Supabase Storage bucket `loan-files`. У Supabase всі `id` та `debtor_id` є `BIGINT`.
 
 ## Legacy Local Postgres
 

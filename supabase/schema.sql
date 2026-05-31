@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS public.loans (
     loan_date DATE,
     due_date DATE,
     notes TEXT,
+    files JSONB NOT NULL DEFAULT '[]'::JSONB,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -66,10 +67,21 @@ INSERT INTO storage.buckets (id, name, public)
 VALUES ('debtor-photos', 'debtor-photos', true)
 ON CONFLICT (id) DO UPDATE SET public = EXCLUDED.public;
 
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('loan-files', 'loan-files', true)
+ON CONFLICT (id) DO UPDATE SET public = EXCLUDED.public;
+
 DROP POLICY IF EXISTS "Public read debtor photos" ON storage.objects;
+DROP POLICY IF EXISTS "Public read loan files" ON storage.objects;
 
 CREATE POLICY "Public read debtor photos"
     ON storage.objects
     FOR SELECT
     TO anon, authenticated
     USING (bucket_id = 'debtor-photos');
+
+CREATE POLICY "Public read loan files"
+    ON storage.objects
+    FOR SELECT
+    TO anon, authenticated
+    USING (bucket_id = 'loan-files');

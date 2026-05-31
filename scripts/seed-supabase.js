@@ -29,7 +29,7 @@ const [debtorsResult, loansResult, repaymentsResult] = await Promise.all([
         ORDER BY full_name ASC
     `),
     query(`
-        SELECT id, debtor_id, amount, loan_date, due_date, notes
+        SELECT id, debtor_id, amount, loan_date, due_date, notes, files
         FROM loans
         ORDER BY loan_date ASC NULLS LAST, id ASC
     `),
@@ -62,6 +62,7 @@ const loans = loansResult.rows.map(row => ({
     loan_date: row.loan_date,
     due_date: row.due_date,
     notes: row.notes,
+    files: Array.isArray(row.files) ? row.files : [],
 }));
 
 const repayments = repaymentsResult.rows.map(row => ({
@@ -84,6 +85,7 @@ await insertRows(
             loan_date: row.loan_date,
             due_date: row.due_date,
             notes: row.notes,
+            files: row.files,
         }))
         .filter(row => row.debtor_id),
 );

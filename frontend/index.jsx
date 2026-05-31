@@ -71,7 +71,7 @@ async function fetchDebtorsFromSupabase() {
             .order('full_name', {ascending: true}),
         supabase
             .from('loans')
-            .select('id, debtor_id, amount, loan_date, due_date, notes')
+            .select('id, debtor_id, amount, loan_date, due_date, notes, files')
             .order('loan_date', {ascending: false, nullsFirst: false})
             .order('id', {ascending: false}),
         supabase
@@ -93,6 +93,7 @@ async function fetchDebtorsFromSupabase() {
         date: row.loan_date,
         dueDate: row.due_date,
         notes: row.notes || '',
+        files: normalizeFiles(row.files),
     }));
     const repaymentsByDebtor = groupByDebtor(repaymentsResponse.data || [], row => ({
         id: row.id,
@@ -331,12 +332,26 @@ function ActivityList({title, emptyLabel, items, amountKey, dateKey, noteKey}) {
                                 <strong className="money-value">{formatMoney(item[amountKey])}</strong>
                                 <span>{formatDate(item[dateKey])}</span>
                                 {noteKey && item[noteKey] ? <em>{item[noteKey]}</em> : null}
+                                {item.files?.length ? <FileList files={item.files} /> : null}
                             </div>
                             <span className="activity-mark" />
                         </div>
                     ))}
                 </div>
             )}
+        </div>
+    );
+}
+
+function FileList({files}) {
+    return (
+        <div className="loan-files" aria-label="Файли позики">
+            {files.map(file => (
+                <a href={file.url} target="_blank" rel="noreferrer" key={file.path || file.url}>
+                    <span aria-hidden="true">{file.type?.startsWith('image/') ? '▧' : '▤'}</span>
+                    {file.name || 'Файл'}
+                </a>
+            ))}
         </div>
     );
 }
@@ -626,6 +641,12 @@ function groupByDebtor(rows, mapper) {
 function toNumber(value) {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function normalizeFiles(files) {
+    return Array.isArray(files)
+        ? files.filter(file => file && typeof file.url === 'string' && file.url.length > 0)
+        : [];
 }
 
 function dateTime(value) {
