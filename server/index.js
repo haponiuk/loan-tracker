@@ -70,6 +70,24 @@ app.get('/api/debtors', async (request, response) => {
     }
 });
 
+app.post('/api/debtors', async (request, response) => {
+    try {
+        const input = normalizeDebtorInput(request.body || {});
+        const result = await query(
+            `
+                INSERT INTO debtors (full_name, first_name, last_name, photo_url)
+                VALUES ($1, $2, $3, $4)
+                RETURNING id, full_name, first_name, last_name, borrowed, repaid, remaining, photo_url
+            `,
+            [input.fullName, input.firstName, input.lastName, input.photoUrl],
+        );
+
+        response.status(201).json({debtor: mapDebtor(result.rows[0])});
+    } catch (error) {
+        response.status(400).json({error: error.message});
+    }
+});
+
 app.listen(port, () => {
     console.log(`Loan Tracker API listening on http://localhost:${port}`);
 });
@@ -86,4 +104,54 @@ function groupByDebtor(rows, mapper) {
 function toNumber(value) {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function normalizeDebtorInput(input) {
+    const firstName = cleanText(input.firstName);
+    const lastName = cleanText(input.lastName);
+    const photoUrl = cleanText(input.photoUrl);
+    const fullName = [firstName, lastName].filter(Boolean).join(' ').trim();
+
+    if (!fullName) {
+        throw new Error('Вкажи хоча б імʼя або прізвище.');
+    }
+
+    if (photoUrl && !isValidUrl(photoUrl)) {
+        throw new Error('Фото URL має бути повним посиланням.');
+    }
+
+    return {
+        fullName,
+        firstName: firstName || null,
+        lastName: lastName || null,
+        photoUrl: photoUrl || null,
+    };
+}
+
+function mapDebtor(row) {
+    return {
+        id: row.id,
+        name: row.full_name,
+        firstName: row.first_name || '',
+        lastName: row.last_name || '',
+        borrowed: toNumber(row.borrowed),
+        repaid: toNumber(row.repaid),
+        remaining: toNumber(row.remaining),
+        photoUrl: row.photo_url,
+        loans: [],
+        repayments: [],
+    };
+}
+
+function cleanText(value) {
+    return typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : '';
+}
+
+function isValidUrl(value) {
+    try {
+        const url = new URL(value);
+        return url.protocol === 'http:' || url.protocol === 'https:';
+    } catch {
+        return false;
+    }
 }

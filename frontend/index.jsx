@@ -4,7 +4,7 @@ import {hasSupabaseConfig, supabase} from './supabase.js';
 import './style.css';
 
 function LoanTrackerApp() {
-    const {debtors, error, isLoading} = useDebtors();
+    const {addDebtor, debtors, error, isLoading} = useDebtors();
 
     if (isLoading) {
         return <StatusScreen title="Завантажую дані" text="Підключаюся до Supabase." />;
@@ -19,7 +19,7 @@ function LoanTrackerApp() {
         );
     }
 
-    return <LoanDashboard debtors={debtors} />;
+    return <LoanDashboard debtors={debtors} onAddDebtor={addDebtor} />;
 }
 
 function useDebtors() {
@@ -59,7 +59,13 @@ function useDebtors() {
         };
     }, []);
 
-    return {debtors, error, isLoading};
+    async function addDebtor(input) {
+        const createdDebtor = await createDebtor(input);
+        setDebtors(currentDebtors => attachRatings([...currentDebtors, createdDebtor]));
+        return createdDebtor;
+    }
+
+    return {addDebtor, debtors, error, isLoading};
 }
 
 async function fetchDebtorsFromSupabase() {
@@ -117,7 +123,24 @@ async function fetchDebtorsFromSupabase() {
     };
 }
 
-function LoanDashboard({debtors}) {
+async function createDebtor(input) {
+    const response = await fetch('/api/debtors', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(input),
+    });
+
+    const payload = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+        throw new Error(payload.error || 'Не вдалося додати людину');
+    }
+
+    return payload.debtor;
+}
+
+function LoanDashboard({debtors, onAddDebtor}) {
+    const [isAddPersonOpen, setIsAddPersonOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedRecordId, setSelectedRecordId] = useState(null);
 
@@ -141,7 +164,12 @@ function LoanDashboard({debtors}) {
                         <p className="eyebrow">Finance</p>
                         <h1>Хлопці</h1>
                     </div>
-                    <button className="add-person-button" type="button">
+                    <button
+                        aria-label="Додати людину"
+                        className="add-person-button"
+                        onClick={() => setIsAddPersonOpen(true)}
+                        type="button"
+                    >
                         <span aria-hidden="true">+</span>
                         Додати людину
                     </button>
@@ -194,7 +222,111 @@ function LoanDashboard({debtors}) {
             <section className="detail-panel">
                 {selectedDebtor ? <DebtorDetail debtor={selectedDebtor} /> : <NoDebtors />}
             </section>
+
+            {isAddPersonOpen ? (
+                <AddPersonDialog
+                    onClose={() => setIsAddPersonOpen(false)}
+                    onCreate={async formValues => {
+                        const createdDebtor = await onAddDebtor(formValues);
+                        setSelectedRecordId(createdDebtor.id);
+                        setSearchTerm('');
+                        setIsAddPersonOpen(false);
+                    }}
+                />
+            ) : null}
         </main>
+    );
+}
+
+function AddPersonDialog({onClose, onCreate}) {
+    const [error, setError] = useState('');
+    const [formValues, setFormValues] = useState({
+        firstName: '',
+        lastName: '',
+        photoUrl: '',
+    });
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    async function handleSubmit(event) {
+        event.preventDefault();
+        setError('');
+
+        if (!formValues.firstName.trim() && !formValues.lastName.trim()) {
+            setError('Вкажи хоча б імʼя або прізвище.');
+            return;
+        }
+
+        setIsSubmitting(true);
+
+        try {
+            await onCreate(formValues);
+        } catch (submitError) {
+            setError(submitError.message);
+        } finally {
+            setIsSubmitting(false);
+        }
+    }
+
+    function updateField(fieldName, value) {
+        setFormValues(currentValues => ({
+            ...currentValues,
+            [fieldName]: value,
+        }));
+    }
+
+    return (
+        <div className="dialog-backdrop" role="presentation">
+            <form className="person-dialog" onSubmit={handleSubmit}>
+                <div className="dialog-head">
+                    <div>
+                        <p className="eyebrow">Новий боржник</p>
+                        <h2>Додати людину</h2>
+                    </div>
+                    <button aria-label="Закрити" className="icon-button" onClick={onClose} type="button">
+                        ×
+                    </button>
+                </div>
+
+                <div className="form-grid">
+                    <label>
+                        <span>Імʼя</span>
+                        <input
+                            autoFocus
+                            onChange={event => updateField('firstName', event.target.value)}
+                            placeholder="Віталій"
+                            value={formValues.firstName}
+                        />
+                    </label>
+                    <label>
+                        <span>Прізвище</span>
+                        <input
+                            onChange={event => updateField('lastName', event.target.value)}
+                            placeholder="Тарківський"
+                            value={formValues.lastName}
+                        />
+                    </label>
+                    <label className="wide-field">
+                        <span>Фото URL</span>
+                        <input
+                            onChange={event => updateField('photoUrl', event.target.value)}
+                            placeholder="https://..."
+                            value={formValues.photoUrl}
+                        />
+                    </label>
+                </div>
+
+                {error ? <div className="form-error">{error}</div> : null}
+
+                <div className="dialog-actions">
+                    <button className="secondary-button" onClick={onClose} type="button">
+                        Скасувати
+                    </button>
+                    <button className="primary-button" disabled={isSubmitting} type="submit">
+                        {isSubmitting ? 'Додаю...' : 'Додати'}
+                    </button>
+                </div>
+            </form>
+        </div>
     );
 }
 
