@@ -781,6 +781,13 @@ button {
     background: var(--neutral-50);
 }
 
+.activity-title-copy {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
 .activity-title h3 {
     font-size: 16px;
     font-weight: 700;
@@ -798,6 +805,40 @@ button {
     color: var(--neutral-600);
     font-size: 11px;
     font-weight: 700;
+}
+
+.activity-add-button {
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    flex-shrink: 0;
+    border-radius: var(--radius-sm);
+    background: #ffffff;
+    border: var(--border-main);
+    color: var(--neutral-500);
+    transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), transform var(--transition-fast);
+}
+
+.activity-add-button:hover {
+    background: var(--neutral-50);
+    color: var(--neutral-800);
+    transform: translateY(-1px);
+}
+
+.activity-add-button.loan:hover {
+    border-color: var(--warning-border);
+    color: var(--warning);
+}
+
+.activity-add-button.repayment:hover {
+    border-color: var(--success-border);
+    color: var(--success);
+}
+
+.activity-add-button svg {
+    width: 15px;
+    height: 15px;
 }
 
 .muted-empty {
@@ -1216,7 +1257,8 @@ button {
     color: var(--neutral-500);
 }
 
-.form-field input {
+.form-field input,
+.form-field textarea {
     height: 40px;
     border: var(--border-main);
     border-radius: var(--radius-md);
@@ -1227,14 +1269,56 @@ button {
     transition: background var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
-.form-field input:focus {
+.form-field textarea {
+    height: auto;
+    min-height: 96px;
+    padding: 10px 14px;
+    line-height: 1.45;
+    resize: vertical;
+}
+
+.form-field input[type="file"] {
+    padding: 8px 10px;
+    font-size: 12px;
+}
+
+.form-field input:focus,
+.form-field textarea:focus {
     background: #ffffff;
     border-color: var(--primary);
     box-shadow: var(--shadow-focus);
 }
 
-.form-field input::placeholder {
+.form-field input::placeholder,
+.form-field textarea::placeholder {
     color: var(--neutral-300);
+}
+
+.transaction-dialog {
+    max-width: 560px;
+}
+
+.selected-file-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 14px;
+}
+
+.selected-file-chip {
+    display: inline-flex;
+    align-items: center;
+    max-width: 100%;
+    padding: 4px 8px;
+    border-radius: var(--radius-sm);
+    background: var(--neutral-50);
+    border: var(--border-main);
+    color: var(--neutral-600);
+    font-size: 12px;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 /* Form Validation Errors */
@@ -1652,4 +1736,3 @@ button {
     width: 14px;
     height: 14px;
 }
-

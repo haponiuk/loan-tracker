@@ -4,7 +4,7 @@ import {hasSupabaseConfig, supabase} from './supabase.js';
 import './style.css';
 
 function LoanTrackerApp() {
-    const {addDebtor, debtors, error, isLoading} = useDebtors();
+    const {addDebtor, addLoan, addRepayment, debtors, error, isLoading} = useDebtors();
 
     if (isLoading) {
         return <StatusScreen title="Завантаження даних" text="Підключаюся до Supabase та завантажую профілі..." />;
@@ -19,7 +19,7 @@ function LoanTrackerApp() {
         );
     }
 
-    return <LoanDashboard debtors={debtors} onAddDebtor={addDebtor} />;
+    return <LoanDashboard debtors={debtors} onAddDebtor={addDebtor} onAddLoan={addLoan} onAddRepayment={addRepayment} />;
 }
 
 function useDebtors() {
@@ -65,7 +65,19 @@ function useDebtors() {
         return createdDebtor;
     }
 
-    return {addDebtor, debtors, error, isLoading};
+    async function addLoan(debtorId, input) {
+        const updatedDebtor = await createLoan(debtorId, input);
+        setDebtors(currentDebtors => attachRatings(replaceDebtor(currentDebtors, updatedDebtor)));
+        return updatedDebtor;
+    }
+
+    async function addRepayment(debtorId, input) {
+        const updatedDebtor = await createRepayment(debtorId, input);
+        setDebtors(currentDebtors => attachRatings(replaceDebtor(currentDebtors, updatedDebtor)));
+        return updatedDebtor;
+    }
+
+    return {addDebtor, addLoan, addRepayment, debtors, error, isLoading};
 }
 
 async function fetchDebtorsFromSupabase() {
@@ -139,8 +151,41 @@ async function createDebtor(input) {
     return payload.debtor;
 }
 
-function LoanDashboard({debtors, onAddDebtor}) {
+async function createLoan(debtorId, input) {
+    const response = await fetch(`/api/debtors/${debtorId}/loans`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(input),
+    });
+
+    const payload = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+        throw new Error(payload.error || 'Не вдалося додати позику');
+    }
+
+    return payload.debtor;
+}
+
+async function createRepayment(debtorId, input) {
+    const response = await fetch(`/api/debtors/${debtorId}/repayments`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(input),
+    });
+
+    const payload = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+        throw new Error(payload.error || 'Не вдалося додати повернення');
+    }
+
+    return payload.debtor;
+}
+
+function LoanDashboard({debtors, onAddDebtor, onAddLoan, onAddRepayment}) {
     const [isAddPersonOpen, setIsAddPersonOpen] = useState(false);
+    const [transactionDialog, setTransactionDialog] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedRecordId, setSelectedRecordId] = useState(null);
     const searchRef = useRef(null);
@@ -263,7 +308,15 @@ function LoanDashboard({debtors, onAddDebtor}) {
             </aside>
 
             <section className="detail-panel">
-                {selectedDebtor ? <DebtorDetail debtor={selectedDebtor} /> : <NoDebtors />}
+                {selectedDebtor ? (
+                    <DebtorDetail
+                        debtor={selectedDebtor}
+                        onAddLoan={() => setTransactionDialog({type: 'loan', debtor: selectedDebtor})}
+                        onAddRepayment={() => setTransactionDialog({type: 'repayment', debtor: selectedDebtor})}
+                    />
+                ) : (
+                    <NoDebtors />
+                )}
             </section>
 
             {isAddPersonOpen ? (
@@ -274,6 +327,22 @@ function LoanDashboard({debtors, onAddDebtor}) {
                         setSelectedRecordId(createdDebtor.id);
                         setSearchTerm('');
                         setIsAddPersonOpen(false);
+                    }}
+                />
+            ) : null}
+
+            {transactionDialog ? (
+                <TransactionDialog
+                    debtor={transactionDialog.debtor}
+                    type={transactionDialog.type}
+                    onClose={() => setTransactionDialog(null)}
+                    onCreate={async formValues => {
+                        const updatedDebtor =
+                            transactionDialog.type === 'loan'
+                                ? await onAddLoan(transactionDialog.debtor.id, formValues)
+                                : await onAddRepayment(transactionDialog.debtor.id, formValues);
+                        setSelectedRecordId(updatedDebtor.id);
+                        setTransactionDialog(null);
                     }}
                 />
             ) : null}
@@ -525,7 +594,256 @@ function AddPersonDialog({onClose, onCreate}) {
     );
 }
 
-function DebtorDetail({debtor}) {
+function TransactionDialog({debtor, type, onClose, onCreate}) {
+    const isLoan = type === 'loan';
+    const [error, setError] = useState('');
+    const [formValues, setFormValues] = useState({
+        amount: '',
+        date: getTodayInputValue(),
+        dueDate: '',
+        notes: '',
+    });
+    const [selectedFiles, setSelectedFiles] = useState([]);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    useEffect(() => {
+        function handleKeyDown(event) {
+            if (event.key === 'Escape') {
+                onClose();
+            }
+        }
+        document.addEventListener('keydown', handleKeyDown);
+        document.body.classList.add('modal-open');
+        return () => {
+            document.removeEventListener('keydown', handleKeyDown);
+            document.body.classList.remove('modal-open');
+        };
+    }, [onClose]);
+
+    async function handleSubmit(event) {
+        event.preventDefault();
+        setError('');
+
+        const amount = Number(String(formValues.amount).replace(',', '.'));
+        if (!Number.isFinite(amount) || amount <= 0) {
+            setError('Вкажіть суму більшу за 0.');
+            return;
+        }
+
+        if (!formValues.date) {
+            setError(isLoan ? 'Вкажіть дату позики.' : 'Вкажіть дату повернення.');
+            return;
+        }
+
+        setIsSubmitting(true);
+
+        try {
+            const files = isLoan ? await uploadLoanFiles(selectedFiles) : [];
+            await onCreate({
+                amount,
+                date: formValues.date,
+                dueDate: isLoan ? formValues.dueDate : '',
+                notes: isLoan ? formValues.notes : '',
+                files,
+            });
+        } catch (submitError) {
+            setError(submitError.message);
+        } finally {
+            setIsSubmitting(false);
+        }
+    }
+
+    function updateField(fieldName, value) {
+        setFormValues(currentValues => ({
+            ...currentValues,
+            [fieldName]: value,
+        }));
+    }
+
+    function handleFilesChange(event) {
+        const files = Array.from(event.target.files || []);
+        const oversizedFile = files.find(file => file.size > 20 * 1024 * 1024);
+
+        if (oversizedFile) {
+            setError('Один файл не повинен перевищувати 20MB.');
+            return;
+        }
+
+        setSelectedFiles(files);
+        setError('');
+    }
+
+    function handleBackdropClick(event) {
+        if (event.target === event.currentTarget) {
+            onClose();
+        }
+    }
+
+    return (
+        <div className="dialog-backdrop" onClick={handleBackdropClick} role="presentation">
+            <form className="person-dialog transaction-dialog" onSubmit={handleSubmit}>
+                <div className="dialog-head">
+                    <div>
+                        <p className="eyebrow">{debtor.name}</p>
+                        <h2>{isLoan ? 'Нова позика' : 'Нове повернення'}</h2>
+                    </div>
+                    <button aria-label="Закрити" className="icon-button" onClick={onClose} type="button">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+
+                <div className="form-grid">
+                    <label className="form-field">
+                        <span>Сума, грн</span>
+                        <input
+                            autoFocus
+                            inputMode="decimal"
+                            min="0.01"
+                            onChange={event => updateField('amount', event.target.value)}
+                            placeholder="1500"
+                            step="0.01"
+                            type="number"
+                            value={formValues.amount}
+                        />
+                    </label>
+                    <label className="form-field">
+                        <span>{isLoan ? 'Дата позики' : 'Дата повернення'}</span>
+                        <input
+                            onChange={event => updateField('date', event.target.value)}
+                            type="date"
+                            value={formValues.date}
+                        />
+                    </label>
+
+                    {isLoan ? (
+                        <>
+                            <label className="form-field">
+                                <span>Повернути до</span>
+                                <input
+                                    onChange={event => updateField('dueDate', event.target.value)}
+                                    type="date"
+                                    value={formValues.dueDate}
+                                />
+                            </label>
+                            <label className="form-field">
+                                <span>Файли</span>
+                                <input multiple onChange={handleFilesChange} type="file" />
+                            </label>
+                            <label className="form-field wide-field">
+                                <span>Нотатки</span>
+                                <textarea
+                                    onChange={event => updateField('notes', event.target.value)}
+                                    placeholder="Короткий опис або домовленість"
+                                    rows="4"
+                                    value={formValues.notes}
+                                />
+                            </label>
+                        </>
+                    ) : null}
+                </div>
+
+                {selectedFiles.length ? (
+                    <div className="selected-file-list">
+                        {selectedFiles.map(file => (
+                            <span className="selected-file-chip" key={`${file.name}-${file.size}`}>
+                                {file.name}
+                            </span>
+                        ))}
+                    </div>
+                ) : null}
+
+                {error ? (
+                    <div className="form-error">
+                        <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                        <span>{error}</span>
+                    </div>
+                ) : null}
+
+                <div className="dialog-actions">
+                    <button className="secondary-button" onClick={onClose} type="button">
+                        Скасувати
+                    </button>
+                    <button className="primary-button" disabled={isSubmitting} type="submit">
+                        {isSubmitting ? (
+                            <>
+                                <span className="spinner" />
+                                <span>Зберігаю...</span>
+                            </>
+                        ) : (
+                            isLoan ? 'Додати позику' : 'Додати повернення'
+                        )}
+                    </button>
+                </div>
+            </form>
+        </div>
+    );
+}
+
+async function uploadLoanFiles(files) {
+    const uploadedFiles = [];
+
+    for (const file of files) {
+        if (hasSupabaseConfig && supabase) {
+            const uploadResponse = await fetch('/api/loan-files/upload', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    fileName: file.name,
+                    contentType: file.type,
+                    size: file.size,
+                }),
+            });
+
+            if (!uploadResponse.ok) {
+                const payload = await uploadResponse.json().catch(() => ({}));
+                throw new Error(payload.error || 'Помилка підготовки завантаження файлу.');
+            }
+
+            const uploadPayload = await uploadResponse.json();
+            const {error: uploadError} = await supabase.storage
+                .from(uploadPayload.bucket)
+                .uploadToSignedUrl(uploadPayload.path, uploadPayload.token, file, {
+                    cacheControl: '3600',
+                    contentType: file.type || 'application/octet-stream',
+                });
+
+            if (uploadError) {
+                throw new Error(`Помилка завантаження файлу в Supabase: ${uploadError.message}`);
+            }
+
+            uploadedFiles.push(uploadPayload.file);
+            continue;
+        }
+
+        const base64Data = await fileToBase64(file);
+        const response = await fetch('/api/loan-files/upload', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                fileName: file.name,
+                contentType: file.type,
+                size: file.size,
+                fileData: base64Data,
+            }),
+        });
+
+        if (!response.ok) {
+            const payload = await response.json().catch(() => ({}));
+            throw new Error(payload.error || 'Помилка завантаження файлу на сервер.');
+        }
+
+        const payload = await response.json();
+        uploadedFiles.push(payload.file);
+    }
+
+    return uploadedFiles;
+}
+
+function DebtorDetail({debtor, onAddLoan, onAddRepayment}) {
     const rating = debtor.rating;
 
     return (
@@ -565,6 +883,7 @@ function DebtorDetail({debtor}) {
                     dateKey="date"
                     noteKey="notes"
                     type="loan"
+                    onAdd={onAddLoan}
                 />
                 <ActivityList
                     title="Повернення"
@@ -573,6 +892,7 @@ function DebtorDetail({debtor}) {
                     amountKey="amount"
                     dateKey="date"
                     type="repayment"
+                    onAdd={onAddRepayment}
                 />
             </section>
 
@@ -646,12 +966,24 @@ function RatingIcon({tone}) {
     );
 }
 
-function ActivityList({title, emptyLabel, items, amountKey, dateKey, noteKey, type}) {
+function ActivityList({title, emptyLabel, items, amountKey, dateKey, noteKey, type, onAdd}) {
     return (
         <div className="activity-card">
             <div className="activity-title">
-                <h3>{title}</h3>
-                <span className="activity-badge">{items.length}</span>
+                <div className="activity-title-copy">
+                    <h3>{title}</h3>
+                    <span className="activity-badge">{items.length}</span>
+                </div>
+                <button
+                    aria-label={`Додати ${type === 'loan' ? 'позику' : 'повернення'}`}
+                    className={`activity-add-button ${type}`}
+                    onClick={onAdd}
+                    type="button"
+                >
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                    </svg>
+                </button>
             </div>
             {items.length === 0 ? (
                 <div className="muted-empty">{emptyLabel}</div>
@@ -1001,6 +1333,10 @@ function sumBy(items, key) {
     return items.reduce((total, item) => total + (Number(item[key]) || 0), 0);
 }
 
+function replaceDebtor(debtors, updatedDebtor) {
+    return debtors.map(debtor => (debtor.id === updatedDebtor.id ? updatedDebtor : debtor));
+}
+
 function groupByDebtor(rows, mapper) {
     return rows.reduce((map, row) => {
         const items = map.get(row.debtor_id) || [];
@@ -1019,6 +1355,24 @@ function normalizeFiles(files) {
     return Array.isArray(files)
         ? files.filter(file => file && typeof file.url === 'string' && file.url.length > 0)
         : [];
+}
+
+function fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => {
+            const base64 = reader.result.split(',')[1];
+            resolve(base64);
+        };
+        reader.onerror = error => reject(error);
+    });
+}
+
+function getTodayInputValue() {
+    const now = new Date();
+    const timezoneOffset = now.getTimezoneOffset() * 60000;
+    return new Date(now.getTime() - timezoneOffset).toISOString().slice(0, 10);
 }
 
 function dateTime(value) {
